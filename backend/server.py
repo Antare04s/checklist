@@ -834,7 +834,7 @@ async def parse_image(file: UploadFile = File(...), current_user: dict = Depends
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}",
                 headers={"content-type": "application/json"},
                 json={
                     "contents": [{
