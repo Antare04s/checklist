@@ -16,7 +16,7 @@
         "NSLocationWhenInUseUsageDescription": "Tag flight location and fetch local weather",
         "NSMicrophoneUsageDescription": "Record video clips of flight issues"
       },
-      "bundleIdentifier": "com.emergent.flightops.mjo30p"
+      "bundleIdentifier": "app.flyready"
     },
     "android": {
       "adaptiveIcon": {
@@ -32,7 +32,7 @@
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO"
       ],
-      "package": "com.emergent.flightops.mjo30p"
+      "package": "app.flyready"
     },
     "web": {
       "bundler": "metro",
