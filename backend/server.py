@@ -814,7 +814,7 @@ async def public_checklist(checklist_id: str):
 @api.post("/checklists/parse-image")
 async def parse_image(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     """
-    Extract checklist items from an image using the Claude API.
+    Extract checklist items from an image using Google Gemini API (free).
     Works the same way as parse-pdf but for photos of paper checklists.
     """
     import base64
@@ -823,40 +823,29 @@ async def parse_image(file: UploadFile = File(...), current_user: dict = Depends
     image_bytes = await file.read()
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
 
-    # Determine media type
     content_type = file.content_type or "image/jpeg"
     if content_type not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
         content_type = "image/jpeg"
 
-    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not anthropic_key:
+    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    if not gemini_key:
         raise HTTPException(500, "Image reading is not configured on this server.")
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": anthropic_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
+                headers={"content-type": "application/json"},
                 json={
-                    "model": "claude-opus-4-5",
-                    "max_tokens": 1024,
-                    "messages": [{
-                        "role": "user",
-                        "content": [
+                    "contents": [{
+                        "parts": [
                             {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": content_type,
+                                "inline_data": {
+                                    "mime_type": content_type,
                                     "data": image_b64,
                                 }
                             },
                             {
-                                "type": "text",
                                 "text": (
                                     "This is a photo of a drone checklist. "
                                     "Extract every checklist item from the image. "
@@ -878,10 +867,12 @@ async def parse_image(file: UploadFile = File(...), current_user: dict = Depends
         raise HTTPException(500, "Image reading service unavailable. Try manual entry.")
 
     result = response.json()
-    text = result.get("content", [{}])[0].get("text", "").strip()
+    # Gemini response format
+    text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
 
-    # Strip any markdown fences Claude might add
-    text = text.strip("` \n")
+    # Strip any markdown fences
+    text = text.strip("`
+ ")
     if text.startswith("json"):
         text = text[4:].strip()
 
