@@ -871,8 +871,7 @@ async def parse_image(file: UploadFile = File(...), current_user: dict = Depends
     text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
 
     # Strip any markdown fences
-    text = text.strip("`
- ")
+    text = text.strip("`\n")
     if text.startswith("json"):
         text = text[4:].strip()
 
