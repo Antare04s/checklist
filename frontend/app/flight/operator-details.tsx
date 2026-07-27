@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal,
   KeyboardAvoidingView, Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as Location from "expo-location";
 import { palette, lightTheme as t, droneTypeLabel } from "../../src/theme";
 import { MapPicker } from "../../src/MapPicker";
 import { useFlightDraft } from "../../src/flightDraft";
@@ -16,6 +15,7 @@ export default function OperatorDetails() {
   const router = useRouter();
   const draft = useFlightDraft();
   const cl = draft.checklist;
+  const [alert, setAlert] = useState<{ title: string; msg: string } | null>(null);
 
   const [region, setRegion] = useState({ latitude: 28.6139, longitude: 77.2090, latitudeDelta: 0.05, longitudeDelta: 0.05 });
   const [pinned, setPinned] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -34,11 +34,14 @@ export default function OperatorDetails() {
 
   if (!cl) return null;
 
+  const showAlert = (title: string, msg: string) => setAlert({ title, msg });
+
   const useMyLocation = async () => {
     try {
+      const Location = await import("expo-location");
       const perm = await Location.requestForegroundPermissionsAsync();
       if (perm.status !== "granted") {
-        Alert.alert("Permission denied", "Location permission is required to fetch GPS coords");
+        showAlert("Permission denied", "Location permission is required to fetch GPS coords");
         return;
       }
       const loc = await Location.getCurrentPositionAsync({});
@@ -47,7 +50,7 @@ export default function OperatorDetails() {
       setPinned({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
       draft.patch({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
     } catch (e: any) {
-      Alert.alert("Error", e.message || "Could not get location");
+      showAlert("Error", e.message || "Could not get location");
     }
   };
 
@@ -58,7 +61,7 @@ export default function OperatorDetails() {
 
   const fetchWeather = async () => {
     if (draft.latitude == null || draft.longitude == null) {
-      Alert.alert("Pin location first", "Tap the map or use 'My location' to set GPS coords first");
+      showAlert("Pin location first", "Tap the map or use 'My location' to set GPS coords first");
       return;
     }
     setFetchingWeather(true);
@@ -72,10 +75,10 @@ export default function OperatorDetails() {
         weather_source: "auto",
       });
       setWeatherMode("auto");
-      Alert.alert("Weather updated", `${data.conditions} · ${data.temperature}°C · wind ${data.wind_speed} m/s`);
+      showAlert("Weather updated", `${data.conditions} · ${data.temperature}°C · wind ${data.wind_speed} m/s`);
     } catch (e: any) {
       const msg = formatApiError(e);
-      Alert.alert("Weather unavailable", msg + "\n\nFalling back to manual entry.");
+      showAlert("Weather unavailable", msg + "\n\nFalling back to manual entry.");
       setWeatherMode("manual");
     } finally {
       setFetchingWeather(false);
@@ -83,22 +86,33 @@ export default function OperatorDetails() {
   };
 
   const checkAirspace = () => {
-    // simple offline heuristic — coordinates ending in 0 = clear, else unknown.
-    // Real airspace API arrives in v2.
     if (draft.latitude != null) {
       draft.patch({ airspace_status: "clear" });
-      Alert.alert("Airspace clear", "No restrictions found at this location.\n\n(Live airspace API available in v2)");
+      showAlert("Airspace clear", "No restrictions found at this location.\n\n(Live airspace API available in v2)");
     }
   };
 
   const begin = () => {
-    if (!draft.operator_name.trim()) return Alert.alert("Pilot required", "Please enter the Pilot in Command name");
-    if (!draft.flight_id.trim()) return Alert.alert("Flight ID required", "Please enter a flight ID");
+    if (!draft.operator_name.trim()) return showAlert("Pilot required", "Please enter the Pilot in Command name");
+    if (!draft.flight_id.trim()) return showAlert("Flight ID required", "Please enter a flight ID");
     router.push("/flight/execute");
   };
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]} testID="operator-details-screen">
+      {/* Web-safe alert modal */}
+      <Modal visible={!!alert} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>{alert?.title}</Text>
+            <Text style={styles.modalMsg}>{alert?.msg}</Text>
+            <TouchableOpacity style={styles.modalBtn} onPress={() => setAlert(null)}>
+              <Text style={styles.modalBtnText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()}><Ionicons name="chevron-back" size={28} color={t.text} /></TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 8 }}>
@@ -109,28 +123,19 @@ export default function OperatorDetails() {
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
-          {/* Operator section */}
           <Text style={styles.sectionTitle}>Operator</Text>
           <Field label="Pilot in Command *" testID="op-pilot" value={draft.operator_name} onChangeText={(v) => draft.patch({ operator_name: v })} />
           <Field label="GCS Operator / Ground crew" testID="op-gcs" value={draft.gcs_operator} onChangeText={(v) => draft.patch({ gcs_operator: v })} />
           <Field label="Flight ID *" testID="op-flightid" value={draft.flight_id} onChangeText={(v) => draft.patch({ flight_id: v })} />
 
-          {/* Aircraft */}
           <Text style={styles.sectionTitle}>Aircraft</Text>
-          <Field label={`Aircraft type (from QR)`} value={droneTypeLabel(cl.drone_type)} onChangeText={() => {}} editable={false} />
+          <Field label="Aircraft type (from QR)" value={droneTypeLabel(cl.drone_type)} onChangeText={() => {}} editable={false} />
           <Field label="Drone serial number" testID="op-serial" value={draft.serial_number_drone || ""} onChangeText={(v) => draft.patch({ serial_number_drone: v })} placeholder="e.g. MR-04" />
           <Field label="Battery used" testID="op-battery" value={draft.battery_used_label || ""} onChangeText={(v) => draft.patch({ battery_used_label: v })} placeholder="e.g. B-02" />
 
-          {/* Location + map */}
           <Text style={styles.sectionTitle}>Location</Text>
           <Field label="Location name" testID="op-location" value={draft.location_name} onChangeText={(v) => draft.patch({ location_name: v })} placeholder="e.g. North field, Site A" />
-          <MapPicker
-            region={region}
-            onRegionChange={setRegion}
-            onPress={onMapPress}
-            pinned={pinned}
-            height={200}
-          />
+          <MapPicker region={region} onRegionChange={setRegion} onPress={onMapPress} pinned={pinned} height={200} />
           <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
             <TouchableOpacity testID="op-use-gps" style={styles.smallBtn} onPress={useMyLocation}>
               <Feather name="navigation" size={16} color={palette.primary} />
@@ -151,7 +156,6 @@ export default function OperatorDetails() {
             </View>
           )}
 
-          {/* Weather */}
           <Text style={styles.sectionTitle}>Weather</Text>
           <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
             <TouchableOpacity testID="op-weather-fetch" style={styles.smallBtn} onPress={fetchWeather} disabled={fetchingWeather}>
@@ -168,7 +172,6 @@ export default function OperatorDetails() {
           <Field label="Temperature (°C)" testID="op-temp" value={String(draft.temperature ?? "")} onChangeText={(v) => draft.patch({ temperature: v ? parseFloat(v) : null })} keyboardType="decimal-pad" />
           <Field label="Conditions" testID="op-cond" value={draft.weather_conditions || ""} onChangeText={(v) => draft.patch({ weather_conditions: v })} placeholder="Clear, partly cloudy…" />
 
-          {/* Mission */}
           <Text style={styles.sectionTitle}>Mission</Text>
           <Field label="Test objective / mission" testID="op-objective" multiline value={draft.test_objective || ""} onChangeText={(v) => draft.patch({ test_objective: v })} />
           <Field label="Changes since last flight" testID="op-changes" multiline value={draft.changes_since_last || ""} onChangeText={(v) => draft.patch({ changes_since_last: v })} />
@@ -211,7 +214,6 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: "700", color: t.text, marginTop: 16, marginBottom: 8 },
   label: { fontSize: 12, color: t.textSecondary, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 },
   input: { minHeight: 44, paddingHorizontal: 14, fontSize: 14, backgroundColor: t.surface, borderRadius: 8, borderWidth: 0.5, borderColor: t.border, color: t.text },
-  mapBox: { height: 200, borderRadius: 12, overflow: "hidden", marginTop: 4, borderWidth: 0.5, borderColor: t.border, backgroundColor: t.border },
   smallBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: palette.primary },
   smallBtnText: { color: palette.primary, fontWeight: "700", fontSize: 13 },
   coordsText: { fontSize: 11, color: t.textSecondary, marginTop: 6 },
@@ -219,4 +221,10 @@ const styles = StyleSheet.create({
   bottomBar: { padding: 16, borderTopWidth: 0.5, borderTopColor: t.border, backgroundColor: t.surface },
   cta: { backgroundColor: palette.primary, height: 52, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   ctaText: { color: palette.white, fontSize: 16, fontWeight: "700" },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
+  modalBox: { backgroundColor: t.surface, borderRadius: 16, padding: 24, width: 300 },
+  modalTitle: { fontSize: 17, fontWeight: "700", color: t.text, marginBottom: 8 },
+  modalMsg: { fontSize: 14, color: t.textSecondary, lineHeight: 22, marginBottom: 20 },
+  modalBtn: { height: 44, borderRadius: 10, backgroundColor: palette.primary, alignItems: "center", justifyContent: "center" },
+  modalBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });
