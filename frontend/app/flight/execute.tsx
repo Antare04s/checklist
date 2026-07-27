@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as Haptics from "expo-haptics";
 import { palette, lightTheme as t } from "../../src/theme";
 import { useFlightDraft } from "../../src/flightDraft";
+
+const haptic = async () => {
+  try { const H = await import("expo-haptics"); H.impactAsync(H.ImpactFeedbackStyle.Light); } catch {}
+};
 
 export default function Execute() {
   const router = useRouter();
@@ -18,6 +21,8 @@ export default function Execute() {
   const [elapsed, setElapsed] = useState(0);
   const startedAt = useRef<Date | null>(null);
   const interval = useRef<any>(null);
+  const [alertMsg, setAlertMsg] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState(false);
 
   useEffect(() => {
     if (!cl) router.replace("/(tabs)/home");
@@ -54,7 +59,7 @@ export default function Execute() {
   const hasFails = counts.f > 0;
 
   const set = (id: string, state: "pass" | "fail" | "empty") => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    haptic();
     draft.setExecution(id, state);
   };
 
@@ -77,13 +82,10 @@ export default function Execute() {
   };
 
   const complete = () => {
-    if (!allDone) return Alert.alert("Items pending", "Please mark every item as pass or fail before completing");
+    if (!allDone) return setAlertMsg("Please mark every item as pass or fail before completing.");
     if (running) startOrStop();
     if (hasFails) {
-      Alert.alert("Save with issues?", `This flight has ${counts.f} failed item(s). Continue?`, [
-        { text: "Cancel", style: "cancel" },
-        { text: "Save with issues", style: "destructive", onPress: () => router.push("/flight/summary") },
-      ]);
+      setConfirmModal(true);
     } else {
       router.push("/flight/summary");
     }
@@ -105,6 +107,37 @@ export default function Execute() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]} testID="execute-screen">
+      {/* Alert modal */}
+      <Modal visible={!!alertMsg} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Items pending</Text>
+            <Text style={styles.modalMsg}>{alertMsg}</Text>
+            <TouchableOpacity style={styles.modalBtn} onPress={() => setAlertMsg(null)}>
+              <Text style={styles.modalBtnText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Confirm save with issues */}
+      <Modal visible={confirmModal} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Save with issues?</Text>
+            <Text style={styles.modalMsg}>This flight has {counts.f} failed item(s). Continue?</Text>
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 4 }}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: t.background, borderWidth: 1, borderColor: t.border, flex: 1 }]} onPress={() => setConfirmModal(false)}>
+                <Text style={{ color: t.text, fontWeight: "600" }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: palette.danger, flex: 1 }]} onPress={() => { setConfirmModal(false); router.push("/flight/summary"); }}>
+                <Text style={{ color: "#fff", fontWeight: "700" }}>Save with issues</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()}><Ionicons name="chevron-back" size={28} color={t.text} /></TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 8 }}>
@@ -113,10 +146,8 @@ export default function Execute() {
         </View>
       </View>
 
-      {/* Progress bar */}
       <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${pct}%` }]} /></View>
 
-      {/* Timer + Stats */}
       <View style={styles.statsBar}>
         <TouchableOpacity testID="execute-timer-btn" style={[styles.timerBtn, { backgroundColor: running ? palette.danger : palette.secondary }]} onPress={startOrStop}>
           <Ionicons name={running ? "stop" : "play"} size={18} color={palette.white} />
@@ -153,19 +184,11 @@ export default function Execute() {
                     >
                       <Feather name="x" size={20} color={state === "fail" ? palette.white : t.textSecondary} />
                     </TouchableOpacity>
-                    <Text
-                      style={[
-                        styles.itemLabel,
-                        state === "pass" && { color: t.textSecondary, textDecorationLine: "line-through" },
-                        state === "fail" && { color: palette.danger },
-                      ]}
-                    >
+                    <Text style={[styles.itemLabel, state === "pass" && { color: t.textSecondary, textDecorationLine: "line-through" }, state === "fail" && { color: palette.danger }]}>
                       {it.label}
                     </Text>
                     {state === "fail" && (
-                      <View style={[styles.issueBadge]}>
-                        <Text style={{ color: palette.white, fontSize: 10, fontWeight: "700" }}>ISSUE</Text>
-                      </View>
+                      <View style={styles.issueBadge}><Text style={{ color: palette.white, fontSize: 10, fontWeight: "700" }}>ISSUE</Text></View>
                     )}
                   </View>
                 </View>
@@ -175,17 +198,9 @@ export default function Execute() {
         ))}
       </ScrollView>
 
-      {/* Bottom action */}
       <View style={styles.bottomBar}>
-        {hasFails && (
-          <Text style={styles.warnText}>{counts.f} item(s) flagged as issues</Text>
-        )}
-        <TouchableOpacity
-          testID="execute-complete-btn"
-          disabled={!allDone}
-          style={[styles.cta, !allDone && { opacity: 0.5 }, hasFails && { backgroundColor: palette.warning }]}
-          onPress={complete}
-        >
+        {hasFails && <Text style={styles.warnText}>{counts.f} item(s) flagged as issues</Text>}
+        <TouchableOpacity testID="execute-complete-btn" disabled={!allDone} style={[styles.cta, !allDone && { opacity: 0.5 }, hasFails && { backgroundColor: palette.warning }]} onPress={complete}>
           <Text style={styles.ctaText}>{hasFails ? "Save with issues" : "Complete checklist"}</Text>
           {hasFails ? <MaterialCommunityIcons name="alert" size={20} color={palette.white} /> : <Feather name="check" size={20} color={palette.white} />}
         </TouchableOpacity>
@@ -218,4 +233,10 @@ const styles = StyleSheet.create({
   warnText: { color: palette.warning, fontWeight: "600", textAlign: "center", marginBottom: 8, fontSize: 13 },
   cta: { backgroundColor: palette.primary, height: 52, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   ctaText: { color: palette.white, fontSize: 16, fontWeight: "700" },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
+  modalBox: { backgroundColor: t.surface, borderRadius: 16, padding: 24, width: 300 },
+  modalTitle: { fontSize: 17, fontWeight: "700", color: t.text, marginBottom: 8 },
+  modalMsg: { fontSize: 14, color: t.textSecondary, lineHeight: 22, marginBottom: 16 },
+  modalBtn: { height: 44, borderRadius: 10, backgroundColor: palette.primary, alignItems: "center", justifyContent: "center" },
+  modalBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });

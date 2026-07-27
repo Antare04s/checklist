@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Image,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image, Modal,
   KeyboardAvoidingView, Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -24,6 +24,9 @@ export default function Summary() {
   const cl = draft.checklist;
   const [busy, setBusy] = useState(false);
   const [photoSheetOpen, setPhotoSheetOpen] = useState(false);
+  const [alertModal, setAlertModal] = useState<{ title: string; msg: string; onOk?: () => void } | null>(null);
+  const [sigModal, setSigModal] = useState<{ which: "pilot" | "gcs" } | null>(null);
+  const [sigText, setSigText] = useState("");
 
   useEffect(() => {
     if (!cl) router.replace("/(tabs)/home");
@@ -44,26 +47,18 @@ export default function Summary() {
     draft.patch({ media: next });
   };
 
-  // Simple "signature" - tap to capture (placeholder until full canvas in v2)
-  const captureSig = (which: "pilot" | "gcs") => {
-    Alert.prompt(
-      `${which === "pilot" ? "Pilot" : "GCS Operator"} signature`,
-      "Type your name to confirm sign-off (full draw-on-screen canvas arrives in v2)",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Sign",
-          onPress: (text) => {
-            if (!text) return;
-            const sig = `signature://${which}/${text}/${Date.now()}`;
-            if (which === "pilot") draft.patch({ pilot_signature_url: sig });
-            else draft.patch({ gcs_signature_url: sig });
-          },
-        },
-      ],
-      "plain-text",
-      ""
-    );
+  const openSigModal = (which: "pilot" | "gcs") => {
+    setSigText("");
+    setSigModal({ which });
+  };
+
+  const confirmSig = () => {
+    if (!sigModal || !sigText.trim()) return;
+    const sig = `signature://${sigModal.which}/${sigText.trim()}/${Date.now()}`;
+    if (sigModal.which === "pilot") draft.patch({ pilot_signature_url: sig });
+    else draft.patch({ gcs_signature_url: sig });
+    setSigModal(null);
+    setSigText("");
   };
 
   const save = async () => {
@@ -106,21 +101,13 @@ export default function Summary() {
       };
       const { data } = await api.post("/flight_logs", payload);
       const goHome = () => {
-        // Navigate first so Execute/Summary unmount BEFORE we clear the draft.
         router.replace("/(tabs)/home");
         setTimeout(() => draft.reset(), 50);
       };
       const msg = `Flight saved: #${String(data.serial_number).padStart(3, "0")} (${data.flight_id})`;
-      if (Platform.OS === "web") {
-        // window.alert doesn't fire onPress callbacks on react-native-web
-        // eslint-disable-next-line no-alert
-        window.alert(msg);
-        goHome();
-      } else {
-        Alert.alert("Flight saved", msg, [{ text: "OK", onPress: goHome }]);
-      }
+      setAlertModal({ title: "Flight saved", msg, onOk: goHome });
     } catch (e: any) {
-      Alert.alert("Error", formatApiError(e));
+      setAlertModal({ title: "Error", msg: formatApiError(e) });
     } finally {
       setBusy(false);
     }
@@ -128,6 +115,45 @@ export default function Summary() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]} testID="summary-screen">
+      {/* Alert modal */}
+      <Modal visible={!!alertModal} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>{alertModal?.title}</Text>
+            <Text style={styles.modalMsg}>{alertModal?.msg}</Text>
+            <TouchableOpacity style={styles.modalBtn} onPress={() => { const cb = alertModal?.onOk; setAlertModal(null); cb?.(); }}>
+              <Text style={styles.modalBtnText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Signature modal */}
+      <Modal visible={!!sigModal} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>{sigModal?.which === "pilot" ? "Pilot" : "GCS Operator"} signature</Text>
+            <Text style={styles.modalMsg}>Type your name to confirm sign-off</Text>
+            <TextInput
+              style={styles.sigInput}
+              value={sigText}
+              onChangeText={setSigText}
+              placeholder="Your name"
+              placeholderTextColor={t.textSecondary}
+              autoFocus
+            />
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: t.background, borderWidth: 1, borderColor: t.border, flex: 1 }]} onPress={() => setSigModal(null)}>
+                <Text style={{ color: t.text, fontWeight: "600" }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: palette.primary, flex: 1 }]} onPress={confirmSig}>
+                <Text style={{ color: "#fff", fontWeight: "700" }}>Sign</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()}><Ionicons name="chevron-back" size={28} color={t.text} /></TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 8 }}>
@@ -209,8 +235,8 @@ export default function Summary() {
           />
 
           <Text style={styles.sectionTitle}>Signatures</Text>
-          <SignatureRow label="Pilot in Command" sig={draft.pilot_signature_url} onTap={() => captureSig("pilot")} />
-          <SignatureRow label="GCS Operator" sig={draft.gcs_signature_url} onTap={() => captureSig("gcs")} />
+          <SignatureRow label="Pilot in Command" sig={draft.pilot_signature_url} onTap={() => openSigModal("pilot")} />
+          <SignatureRow label="GCS Operator" sig={draft.gcs_signature_url} onTap={() => openSigModal("gcs")} />
 
         </ScrollView>
 
@@ -283,7 +309,14 @@ const styles = StyleSheet.create({
   sigRow: { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 12, backgroundColor: t.surface, borderWidth: 0.5, borderColor: t.border, marginBottom: 8 },
   sigLabel: { color: t.text, fontSize: 14, fontWeight: "600" },
   sigValue: { color: t.textSecondary, fontSize: 12, marginTop: 2 },
+  sigInput: { height: 44, backgroundColor: t.background, borderRadius: 8, borderWidth: 0.5, borderColor: t.border, paddingHorizontal: 14, fontSize: 15, color: t.text, marginTop: 8 },
   bottomBar: { padding: 16, borderTopWidth: 0.5, borderTopColor: t.border, backgroundColor: t.surface },
   cta: { backgroundColor: palette.secondary, height: 52, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   ctaText: { color: palette.white, fontSize: 16, fontWeight: "700" },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
+  modalBox: { backgroundColor: t.surface, borderRadius: 16, padding: 24, width: 300 },
+  modalTitle: { fontSize: 17, fontWeight: "700", color: t.text, marginBottom: 8 },
+  modalMsg: { fontSize: 14, color: t.textSecondary, lineHeight: 22 },
+  modalBtn: { height: 44, borderRadius: 10, backgroundColor: palette.primary, alignItems: "center", justifyContent: "center" },
+  modalBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });
