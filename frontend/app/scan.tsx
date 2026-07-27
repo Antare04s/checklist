@@ -1,6 +1,6 @@
-import React, { useState, useRef } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform } from "react-native";
-import { useRouter } from "expo-router";
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -10,27 +10,81 @@ import { useFlightDraft } from "../src/flightDraft";
 
 export default function Scan() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ id?: string }>();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [manual, setManual] = useState(false);
   const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const extractId = (data: string): string => {
+    let id = data.trim();
+    if (id.includes("id=")) id = id.split("id=").pop()?.split("&")[0] || id;
+    if (id.startsWith("flyready://checklist/")) id = id.replace("flyready://checklist/", "");
+    if (id.includes("/checklist/")) id = id.split("/checklist/").pop() || id;
+    id = id.split("/")[0].split("?")[0].trim();
+    return id;
+  };
 
   const handleCode = async (data: string) => {
-    if (scanned) return;
+    if (scanned || busy) return;
     setScanned(true);
-    let id = data.trim();
-    if (id.startsWith("flyready://checklist/")) id = id.replace("flyready://checklist/", "");
+    setBusy(true);
+    setError(null);
+    const id = extractId(data);
+
+    if (!id) {
+      setError("No checklist ID found. Check the QR code or ID and try again.");
+      setScanned(false);
+      setBusy(false);
+      return;
+    }
+
     try {
       const { data: cl } = await api.get(`/checklists/${id}`);
       useFlightDraft.getState().reset();
       useFlightDraft.getState().setChecklist(cl);
       router.replace("/flight/operator-details");
     } catch (e: any) {
-      Alert.alert("Checklist not found", formatApiError(e), [
-        { text: "OK", onPress: () => setScanned(false) },
-      ]);
+      setError(formatApiError(e) || "Checklist not found. Check the ID and try again.");
+      setScanned(false);
+    } finally {
+      setBusy(false);
     }
   };
+
+  // Auto-handle ?id= from QR scan via phone camera
+  useEffect(() => {
+    if (params.id && !scanned && !busy) {
+      handleCode(params.id);
+    }
+  }, [params.id]);
+
+  const ErrorModal = () => (
+    <Modal visible={!!error} transparent animationType="fade">
+      <View style={styles.overlay}>
+        <View style={styles.modalBox}>
+          <Text style={styles.modalTitle}>Checklist not found</Text>
+          <Text style={styles.modalMsg}>{error}</Text>
+          <TouchableOpacity style={styles.modalBtn} onPress={() => { setError(null); setScanned(false); }}>
+            <Text style={styles.modalBtnText}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // Show loading while auto-looking up from ?id=
+  if (params.id && busy) {
+    return (
+      <SafeAreaView style={styles.center}>
+        <ErrorModal />
+        <ActivityIndicator size="large" color={palette.primary} />
+        <Text style={{ color: t.textSecondary, marginTop: 16 }}>Loading checklist…</Text>
+      </SafeAreaView>
+    );
+  }
 
   if (!permission) {
     return <SafeAreaView style={styles.center}><Text style={{ color: t.text }}>Loading…</Text></SafeAreaView>;
@@ -39,15 +93,29 @@ export default function Scan() {
   if (manual) {
     return (
       <SafeAreaView style={styles.center} edges={["top", "bottom"]}>
+        <ErrorModal />
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ width: "100%", padding: 24 }}>
-          <TouchableOpacity onPress={() => setManual(false)} style={{ marginBottom: 16 }}>
+          <TouchableOpacity onPress={() => { setManual(false); setScanned(false); setError(null); }} style={{ marginBottom: 16 }}>
             <Ionicons name="chevron-back" size={28} color={t.text} />
           </TouchableOpacity>
           <Text style={styles.h1}>Enter checklist ID</Text>
-          <Text style={styles.sub}>Paste or type the checklist ID from a damaged QR code</Text>
-          <TextInput testID="scan-manual-input" style={styles.input} value={code} onChangeText={setCode} autoCapitalize="none" placeholder="e.g. 9c6e2a01-…" placeholderTextColor={t.textSecondary} />
-          <TouchableOpacity testID="scan-manual-submit" style={styles.cta} onPress={() => handleCode(code)}>
-            <Text style={styles.ctaText}>Continue</Text>
+          <Text style={styles.sub}>Paste the checklist ID or the full QR link</Text>
+          <TextInput
+            testID="scan-manual-input"
+            style={styles.input}
+            value={code}
+            onChangeText={setCode}
+            autoCapitalize="none"
+            placeholder="e.g. 9c6e2a01-…"
+            placeholderTextColor={t.textSecondary}
+          />
+          <TouchableOpacity
+            testID="scan-manual-submit"
+            style={[styles.cta, busy && { opacity: 0.6 }]}
+            onPress={() => handleCode(code)}
+            disabled={busy}
+          >
+            <Text style={styles.ctaText}>{busy ? "Looking up…" : "Continue"}</Text>
           </TouchableOpacity>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -57,6 +125,7 @@ export default function Scan() {
   if (!permission.granted) {
     return (
       <SafeAreaView style={styles.center} edges={["top", "bottom"]}>
+        <ErrorModal />
         <MaterialCommunityIcons name="camera-off-outline" size={64} color={t.textSecondary} />
         <Text style={styles.h1}>Camera permission needed</Text>
         <Text style={styles.sub}>FlyReady uses your camera to scan drone QR codes</Text>
@@ -72,6 +141,7 @@ export default function Scan() {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#000" }} testID="scan-screen">
+      <ErrorModal />
       <CameraView
         style={StyleSheet.absoluteFill}
         facing="back"
@@ -88,7 +158,6 @@ export default function Scan() {
         </View>
       </SafeAreaView>
 
-      {/* viewfinder frame */}
       <View pointerEvents="none" style={styles.viewfinder}>
         <View style={styles.frame} />
         <Text style={styles.hint}>Align QR code within frame</Text>
@@ -115,7 +184,13 @@ const styles = StyleSheet.create({
   manualBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 48, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.6)", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
   h1: { color: t.text, fontSize: 22, fontWeight: "700", marginTop: 16 },
   sub: { color: t.textSecondary, fontSize: 14, marginTop: 8, textAlign: "center" },
-  input: { height: 48, marginTop: 16, backgroundColor: t.surface, borderRadius: 8, borderWidth: 0.5, borderColor: t.border, paddingHorizontal: 16, fontSize: 15, color: t.text },
+  input: { height: 48, marginTop: 16, backgroundColor: t.surface, borderRadius: 8, borderWidth: 0.5, borderColor: t.border, paddingHorizontal: 16, fontSize: 15, color: t.text, width: "100%" },
   cta: { marginTop: 16, height: 50, borderRadius: 12, backgroundColor: palette.primary, alignItems: "center", justifyContent: "center" },
   ctaText: { color: palette.white, fontWeight: "700", fontSize: 16 },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
+  modalBox: { backgroundColor: t.surface, borderRadius: 16, padding: 24, width: 300 },
+  modalTitle: { fontSize: 17, fontWeight: "700", color: t.text, marginBottom: 8 },
+  modalMsg: { fontSize: 14, color: t.textSecondary, lineHeight: 22, marginBottom: 20 },
+  modalBtn: { height: 44, borderRadius: 10, backgroundColor: palette.primary, alignItems: "center", justifyContent: "center" },
+  modalBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });

@@ -24,7 +24,7 @@ export default function ChecklistQR() {
     return <SafeAreaView style={styles.container}><Text style={{ color: t.text, padding: 16 }}>Loading…</Text></SafeAreaView>;
   }
 
-  const value = cl.qr_code_url || `flyready://checklist/${cl.id}`;
+  const value = `https://flyready-iota.vercel.app/scan?id=${cl.id}`;
 
   const onShare = async () => {
     try {
