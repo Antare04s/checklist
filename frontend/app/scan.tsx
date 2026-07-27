@@ -1,17 +1,68 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View, Text, StyleSheet, TouchableOpacity, TextInput, Modal,
+  KeyboardAvoidingView, Platform, ActivityIndicator,
+} from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { CameraView, useCameraPermissions } from "expo-camera";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { palette, lightTheme as t } from "../src/theme";
 import { api, formatApiError } from "../src/api";
 import { useFlightDraft } from "../src/flightDraft";
 
+// Web QR scanner component
+function WebQrScanner({ onScan }: { onScan: (data: string) => void }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const scannerRef = useRef<any>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { Html5Qrcode } = await import("html5-qrcode");
+        if (!mounted || !containerRef.current) return;
+
+        const scanner = new Html5Qrcode("web-qr-reader");
+        scannerRef.current = scanner;
+
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText) => {
+            onScan(decodedText);
+            scanner.stop().catch(() => {});
+          },
+          () => {} // ignore scan failures
+        );
+      } catch (e) {
+        console.warn("Web QR scanner error:", e);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+      scannerRef.current?.stop?.().catch(() => {});
+    };
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      id="web-qr-reader"
+      style={{
+        width: "100%",
+        maxWidth: 400,
+        margin: "0 auto",
+        borderRadius: 12,
+        overflow: "hidden",
+      }}
+    />
+  );
+}
+
 export default function Scan() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
-  const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [manual, setManual] = useState(false);
   const [code, setCode] = useState("");
@@ -75,7 +126,7 @@ export default function Scan() {
     </Modal>
   );
 
-  // Show loading while auto-looking up from ?id=
+  // Loading state when auto-looking up from ?id=
   if (params.id && busy) {
     return (
       <SafeAreaView style={styles.center}>
@@ -86,10 +137,7 @@ export default function Scan() {
     );
   }
 
-  if (!permission) {
-    return <SafeAreaView style={styles.center}><Text style={{ color: t.text }}>Loading…</Text></SafeAreaView>;
-  }
-
+  // Manual entry screen
   if (manual) {
     return (
       <SafeAreaView style={styles.center} edges={["top", "bottom"]}>
@@ -106,7 +154,7 @@ export default function Scan() {
             value={code}
             onChangeText={setCode}
             autoCapitalize="none"
-            placeholder="e.g. 9c6e2a01-…"
+            placeholder="e.g. 4c911c10-cbe4-492b-..."
             placeholderTextColor={t.textSecondary}
           />
           <TouchableOpacity
@@ -120,6 +168,48 @@ export default function Scan() {
         </KeyboardAvoidingView>
       </SafeAreaView>
     );
+  }
+
+  // ── WEB: use html5-qrcode ──
+  if (Platform.OS === "web") {
+    return (
+      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+        <ErrorModal />
+        <View style={styles.topBarSolid}>
+          <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
+            <Ionicons name="chevron-back" size={28} color={t.text} />
+          </TouchableOpacity>
+          <Text style={styles.topTitle}>Scan drone QR code</Text>
+          <View style={{ width: 36 }} />
+        </View>
+
+        <View style={{ flex: 1, justifyContent: "center", padding: 16 }}>
+          {scanned ? (
+            <View style={{ alignItems: "center" }}>
+              <ActivityIndicator size="large" color={palette.primary} />
+              <Text style={{ color: t.textSecondary, marginTop: 16 }}>Loading checklist…</Text>
+            </View>
+          ) : (
+            <WebQrScanner onScan={handleCode} />
+          )}
+        </View>
+
+        <View style={{ padding: 16 }}>
+          <TouchableOpacity style={styles.manualBtnSolid} onPress={() => setManual(true)}>
+            <Feather name="edit-3" size={18} color={palette.primary} />
+            <Text style={{ color: palette.primary, fontWeight: "600" }}>Enter checklist ID manually</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── NATIVE: use expo-camera ──
+  const { CameraView, useCameraPermissions } = require("expo-camera");
+  const [permission, requestPermission] = useCameraPermissions();
+
+  if (!permission) {
+    return <SafeAreaView style={styles.center}><Text style={{ color: t.text }}>Loading…</Text></SafeAreaView>;
   }
 
   if (!permission.granted) {
@@ -146,11 +236,11 @@ export default function Scan() {
         style={StyleSheet.absoluteFill}
         facing="back"
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-        onBarcodeScanned={(e) => handleCode(e.data)}
+        onBarcodeScanned={(e: any) => handleCode(e.data)}
       />
       <SafeAreaView edges={["top"]} style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
         <View style={styles.topRow}>
-          <TouchableOpacity testID="scan-back-btn" onPress={() => router.back()} style={styles.iconBtn}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
             <Ionicons name="chevron-back" size={28} color={palette.white} />
           </TouchableOpacity>
           <Text style={styles.scanHeader}>Scan drone QR code</Text>
@@ -164,7 +254,7 @@ export default function Scan() {
       </View>
 
       <SafeAreaView edges={["bottom"]} style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: 24 }}>
-        <TouchableOpacity testID="scan-manual-toggle" style={styles.manualBtn} onPress={() => setManual(true)}>
+        <TouchableOpacity style={styles.manualBtnOverlay} onPress={() => setManual(true)}>
           <Feather name="edit-3" size={18} color={palette.white} />
           <Text style={{ color: palette.white, fontWeight: "600" }}>Enter checklist ID manually</Text>
         </TouchableOpacity>
@@ -174,14 +264,18 @@ export default function Scan() {
 }
 
 const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: t.background },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: t.background, padding: 24 },
+  topBarSolid: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 16, borderBottomWidth: 0.5, borderBottomColor: t.border, backgroundColor: t.surface },
+  topTitle: { fontSize: 16, fontWeight: "700", color: t.text },
   topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 16 },
   iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
   scanHeader: { color: palette.white, fontSize: 16, fontWeight: "700" },
   viewfinder: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   frame: { width: 260, height: 260, borderWidth: 3, borderColor: palette.success, borderRadius: 16 },
   hint: { color: palette.white, marginTop: 16, fontSize: 14, fontWeight: "600", backgroundColor: "rgba(0,0,0,0.5)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  manualBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 48, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.6)", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
+  manualBtnOverlay: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 48, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.6)", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
+  manualBtnSolid: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 48, borderRadius: 12, borderWidth: 1, borderColor: palette.primary, backgroundColor: palette.primary + "10" },
   h1: { color: t.text, fontSize: 22, fontWeight: "700", marginTop: 16 },
   sub: { color: t.textSecondary, fontSize: 14, marginTop: 8, textAlign: "center" },
   input: { height: 48, marginTop: 16, backgroundColor: t.surface, borderRadius: 8, borderWidth: 0.5, borderColor: t.border, paddingHorizontal: 16, fontSize: 15, color: t.text, width: "100%" },
