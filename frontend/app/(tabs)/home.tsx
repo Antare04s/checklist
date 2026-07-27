@@ -121,6 +121,12 @@ export default function Home() {
                   </View>
                 </View>
               </View>
+              <TouchableOpacity
+                style={styles.qrIconBtn}
+                onPress={(e) => { e.stopPropagation(); router.push(`/checklist/${cl.id}/qr`); }}
+              >
+                <MaterialCommunityIcons name="qrcode" size={20} color={palette.primary} />
+              </TouchableOpacity>
               <Feather name="chevron-right" size={20} color={t.textSecondary} />
             </TouchableOpacity>
           ))
