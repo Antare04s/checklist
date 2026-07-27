@@ -10,7 +10,6 @@ import { palette, lightTheme as t } from "../src/theme";
 import { api, formatApiError } from "../src/api";
 import { useFlightDraft } from "../src/flightDraft";
 
-// Web QR scanner component
 function WebQrScanner({ onScan }: { onScan: (data: string) => void }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const scannerRef = useRef<any>(null);
@@ -21,10 +20,8 @@ function WebQrScanner({ onScan }: { onScan: (data: string) => void }) {
       try {
         const { Html5Qrcode } = await import("html5-qrcode");
         if (!mounted || !containerRef.current) return;
-
         const scanner = new Html5Qrcode("web-qr-reader");
         scannerRef.current = scanner;
-
         await scanner.start(
           { facingMode: "environment" },
           { fps: 10, qrbox: { width: 250, height: 250 } },
@@ -32,13 +29,12 @@ function WebQrScanner({ onScan }: { onScan: (data: string) => void }) {
             onScan(decodedText);
             scanner.stop().catch(() => {});
           },
-          () => {} // ignore scan failures
+          () => {}
         );
       } catch (e) {
         console.warn("Web QR scanner error:", e);
       }
     })();
-
     return () => {
       mounted = false;
       scannerRef.current?.stop?.().catch(() => {});
@@ -49,13 +45,7 @@ function WebQrScanner({ onScan }: { onScan: (data: string) => void }) {
     <div
       ref={containerRef}
       id="web-qr-reader"
-      style={{
-        width: "100%",
-        maxWidth: 400,
-        margin: "0 auto",
-        borderRadius: 12,
-        overflow: "hidden",
-      }}
+      style={{ width: "100%", maxWidth: 400, margin: "0 auto", borderRadius: 12, overflow: "hidden" }}
     />
   );
 }
@@ -105,7 +95,6 @@ export default function Scan() {
     }
   };
 
-  // Auto-handle ?id= from QR scan via phone camera
   useEffect(() => {
     if (params.id && !scanned && !busy) {
       handleCode(params.id);
@@ -126,7 +115,6 @@ export default function Scan() {
     </Modal>
   );
 
-  // Loading state when auto-looking up from ?id=
   if (params.id && busy) {
     return (
       <SafeAreaView style={styles.center}>
@@ -137,7 +125,6 @@ export default function Scan() {
     );
   }
 
-  // Manual entry screen
   if (manual) {
     return (
       <SafeAreaView style={styles.center} edges={["top", "bottom"]}>
@@ -182,7 +169,6 @@ export default function Scan() {
           <Text style={styles.topTitle}>Scan drone QR code</Text>
           <View style={{ width: 36 }} />
         </View>
-
         <View style={{ flex: 1, justifyContent: "center", padding: 16 }}>
           {scanned ? (
             <View style={{ alignItems: "center" }}>
@@ -193,7 +179,6 @@ export default function Scan() {
             <WebQrScanner onScan={handleCode} />
           )}
         </View>
-
         <View style={{ padding: 16 }}>
           <TouchableOpacity style={styles.manualBtnSolid} onPress={() => setManual(true)}>
             <Feather name="edit-3" size={18} color={palette.primary} />
@@ -204,63 +189,53 @@ export default function Scan() {
     );
   }
 
-  // ── NATIVE: use expo-camera ──
-  const { CameraView, useCameraPermissions } = require("expo-camera");
-  const [permission, requestPermission] = useCameraPermissions();
+  // ── NATIVE: use expo-camera (lazy import) ──
+  const NativeScanner = () => {
+    const { CameraView: CV, useCameraPermissions: useCP } = require("expo-camera");
+    const [perm, reqPerm] = useCP();
 
-  if (!permission) {
-    return <SafeAreaView style={styles.center}><Text style={{ color: t.text }}>Loading…</Text></SafeAreaView>;
-  }
+    if (!perm) return <SafeAreaView style={styles.center}><Text style={{ color: t.text }}>Loading…</Text></SafeAreaView>;
 
-  if (!permission.granted) {
-    return (
-      <SafeAreaView style={styles.center} edges={["top", "bottom"]}>
-        <ErrorModal />
-        <MaterialCommunityIcons name="camera-off-outline" size={64} color={t.textSecondary} />
-        <Text style={styles.h1}>Camera permission needed</Text>
-        <Text style={styles.sub}>FlyReady uses your camera to scan drone QR codes</Text>
-        <TouchableOpacity testID="scan-grant-permission" style={styles.cta} onPress={requestPermission}>
-          <Text style={styles.ctaText}>Grant access</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setManual(true)} style={{ marginTop: 16 }}>
-          <Text style={{ color: palette.primary, fontWeight: "600" }}>Enter checklist ID manually</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <View style={{ flex: 1, backgroundColor: "#000" }} testID="scan-screen">
-      <ErrorModal />
-      <CameraView
-        style={StyleSheet.absoluteFill}
-        facing="back"
-        barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-        onBarcodeScanned={(e: any) => handleCode(e.data)}
-      />
-      <SafeAreaView edges={["top"]} style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
-        <View style={styles.topRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
-            <Ionicons name="chevron-back" size={28} color={palette.white} />
+    if (!perm.granted) {
+      return (
+        <SafeAreaView style={styles.center} edges={["top", "bottom"]}>
+          <ErrorModal />
+          <MaterialCommunityIcons name="camera-off-outline" size={64} color={t.textSecondary} />
+          <Text style={styles.h1}>Camera permission needed</Text>
+          <TouchableOpacity style={styles.cta} onPress={reqPerm}><Text style={styles.ctaText}>Grant access</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => setManual(true)} style={{ marginTop: 16 }}>
+            <Text style={{ color: palette.primary, fontWeight: "600" }}>Enter ID manually</Text>
           </TouchableOpacity>
-          <Text style={styles.scanHeader}>Scan drone QR code</Text>
-          <View style={{ width: 36 }} />
+        </SafeAreaView>
+      );
+    }
+
+    return (
+      <View style={{ flex: 1, backgroundColor: "#000" }}>
+        <ErrorModal />
+        <CV style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={{ barcodeTypes: ["qr"] }} onBarcodeScanned={(e: any) => handleCode(e.data)} />
+        <SafeAreaView edges={["top"]} style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
+          <View style={styles.topRow}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}><Ionicons name="chevron-back" size={28} color={palette.white} /></TouchableOpacity>
+            <Text style={styles.scanHeader}>Scan drone QR code</Text>
+            <View style={{ width: 36 }} />
+          </View>
+        </SafeAreaView>
+        <View pointerEvents="none" style={styles.viewfinder}>
+          <View style={styles.frame} />
+          <Text style={styles.hint}>Align QR code within frame</Text>
         </View>
-      </SafeAreaView>
-
-      <View pointerEvents="none" style={styles.viewfinder}>
-        <View style={styles.frame} />
-        <Text style={styles.hint}>Align QR code within frame</Text>
+        <SafeAreaView edges={["bottom"]} style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: 24 }}>
+          <TouchableOpacity style={styles.manualBtnOverlay} onPress={() => setManual(true)}>
+            <Feather name="edit-3" size={18} color={palette.white} />
+            <Text style={{ color: palette.white, fontWeight: "600" }}>Enter checklist ID manually</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
       </View>
+    );
+  };
 
-      <SafeAreaView edges={["bottom"]} style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: 24 }}>
-        <TouchableOpacity style={styles.manualBtnOverlay} onPress={() => setManual(true)}>
-          <Feather name="edit-3" size={18} color={palette.white} />
-          <Text style={{ color: palette.white, fontWeight: "600" }}>Enter checklist ID manually</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    </View>
-  );
+  return <NativeScanner />;
 }
 
 const styles = StyleSheet.create({
