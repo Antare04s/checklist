@@ -505,10 +505,27 @@ export default function NewChecklist() {
                   style={{ display: "none" }}
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoFile(f); }}
                 />
-                <TouchableOpacity style={styles.uploadBtn} onPress={() => photoInputRef.current?.click()}>
-                  <Ionicons name="image-outline" size={22} color={palette.white} />
-                  <Text style={styles.uploadBtnText}>Choose photo</Text>
-                </TouchableOpacity>
+                <input
+                  id="photo-camera-input"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  style={{ display: "none" }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoFile(f); }}
+                />
+                <View style={{ gap: 10, width: "100%" }}>
+                  <TouchableOpacity style={styles.uploadBtn} onPress={() => {
+                    const el = document.getElementById("photo-camera-input") as HTMLInputElement;
+                    el?.click();
+                  }}>
+                    <Ionicons name="camera-outline" size={22} color={palette.white} />
+                    <Text style={styles.uploadBtnText}>Take photo</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.uploadBtn, { backgroundColor: t.surface, borderWidth: 1, borderColor: palette.primary }]} onPress={() => photoInputRef.current?.click()}>
+                    <Ionicons name="image-outline" size={22} color={palette.primary} />
+                    <Text style={[styles.uploadBtnText, { color: palette.primary }]}>Choose from gallery</Text>
+                  </TouchableOpacity>
+                </View>
               </>
             )}
 
