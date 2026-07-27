@@ -3,15 +3,15 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Modal } f
 import { useRouter } from "expo-router";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { lightTheme, darkTheme, palette } from "../../src/theme";
+import { palette } from "../../src/theme";
+import { useAppTheme } from "../../src/themeContext";
 import { useAuthStore } from "../../src/auth";
 
 export default function Profile() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
-  const [darkMode, setDarkMode] = useState(false);
+  const { theme: t, isDark, toggleDark } = useAppTheme();
   const [logoutModal, setLogoutModal] = useState(false);
-  const t = darkMode ? darkTheme : lightTheme;
 
   const doLogout = async () => {
     await logout();
@@ -31,7 +31,6 @@ export default function Profile() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: t.background }]} edges={["top"]} testID="profile-screen">
 
-      {/* Logout confirm modal */}
       <Modal visible={logoutModal} transparent animationType="fade">
         <View style={styles.overlay}>
           <View style={[styles.modalBox, { backgroundColor: t.surface }]}>
@@ -54,14 +53,13 @@ export default function Profile() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
-        {/* User card */}
         <View style={[styles.userCard, { backgroundColor: t.surface, borderColor: t.border }]}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{(user?.name || "?").slice(0, 1).toUpperCase()}</Text>
           </View>
           <Text style={[styles.name, { color: t.text }]}>{user?.name || "—"}</Text>
-          <Text style={[styles.email, { color: t.textSecondary }]}>{user?.email}</Text>
-          <View style={[styles.roleBadge]}>
+          <Text style={{ fontSize: 13, color: t.textSecondary, marginTop: 2 }}>{user?.email}</Text>
+          <View style={styles.roleBadge}>
             <Text style={styles.roleText}>{(user?.role || "pilot").toUpperCase()}</Text>
           </View>
         </View>
@@ -70,13 +68,13 @@ export default function Profile() {
         <View style={[styles.menuCard, { backgroundColor: t.surface, borderColor: t.border }]}>
           <Row
             testID="profile-dark-mode"
-            icon={<Ionicons name={darkMode ? "moon" : "sunny-outline"} size={18} color={palette.primary} />}
+            icon={<Ionicons name={isDark ? "moon" : "sunny-outline"} size={18} color={palette.primary} />}
             label="Dark mode"
-            onPress={() => setDarkMode(!darkMode)}
+            onPress={toggleDark}
             right={
               <Switch
-                value={darkMode}
-                onValueChange={setDarkMode}
+                value={isDark}
+                onValueChange={toggleDark}
                 trackColor={{ false: t.border, true: palette.primary }}
                 thumbColor={palette.white}
               />
@@ -108,11 +106,6 @@ export default function Profile() {
             label="FlyReady v1.0 — free & open source"
             onPress={() => {}}
           />
-          <Row
-            icon={<Feather name="github" size={18} color={palette.primary} />}
-            label="View on GitHub"
-            onPress={() => {}}
-          />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -127,7 +120,6 @@ const styles = StyleSheet.create({
   avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: palette.primary, alignItems: "center", justifyContent: "center" },
   avatarText: { color: palette.white, fontWeight: "700", fontSize: 28 },
   name: { fontSize: 20, fontWeight: "700", marginTop: 12 },
-  email: { fontSize: 13, marginTop: 2 },
   roleBadge: { marginTop: 10, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: palette.primary + "15" },
   roleText: { color: palette.primary, fontWeight: "700", fontSize: 11, letterSpacing: 0.5 },
   sectionLabel: { fontSize: 12, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", marginTop: 24, marginBottom: 8 },

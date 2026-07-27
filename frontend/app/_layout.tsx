@@ -3,21 +3,32 @@ import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { useColorScheme } from "react-native";
 import { useAuthStore } from "../src/auth";
+import { ThemeProvider, useAppTheme } from "../src/themeContext";
 
-export default function RootLayout() {
+function Inner() {
   const bootstrap = useAuthStore((s) => s.bootstrap);
-  const scheme = useColorScheme();
+  const { isDark } = useAppTheme();
+
   useEffect(() => {
     bootstrap();
   }, [bootstrap]);
 
   return (
+    <>
+      <StatusBar style={isDark ? "light" : "dark"} />
+      <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }} />
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-        <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }} />
+        <ThemeProvider>
+          <Inner />
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
