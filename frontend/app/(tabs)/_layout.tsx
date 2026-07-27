@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Ionicons, Feather } from "@expo/vector-icons";
+import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { palette, useTheme } from "../../src/theme";
 
 export default function TabsLayout() {
@@ -33,6 +33,13 @@ export default function TabsLayout() {
         options={{
           title: "History",
           tabBarIcon: ({ color, size }) => <Feather name="archive" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="maintenance"
+        options={{
+          title: "Maintenance",
+          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="wrench-outline" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
