@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, ActivityIndicator,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -16,7 +16,7 @@ export default function OperatorDetails() {
   const params = useLocalSearchParams<{ checklist_id?: string }>();
   const draft = useFlightDraft();
   const cl = draft.checklist;
-  const [alert, setAlert] = useState<{ title: string; msg: string } | null>(null);
+  const [loading, setLoading] = useState(!!params.checklist_id && !cl);
 
   const [region, setRegion] = useState({ latitude: 28.6139, longitude: 77.2090, latitudeDelta: 0.05, longitudeDelta: 0.05 });
   const [pinned, setPinned] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -29,15 +29,17 @@ export default function OperatorDetails() {
       (async () => {
         try {
           const { data } = await api.get(`/checklists/${params.checklist_id}`);
-          draft.reset();
-          draft.setChecklist(data);
+          useFlightDraft.getState().reset();
+          useFlightDraft.getState().setChecklist(data);
         } catch {
           router.replace("/(tabs)/home");
+        } finally {
+          setLoading(false);
         }
       })();
       return;
     }
-    if (!cl) router.replace("/(tabs)/home");
+    if (!cl && !params.checklist_id) router.replace("/(tabs)/home");
     if (!draft.flight_id) {
       const today = new Date();
       const ymd = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
@@ -46,7 +48,14 @@ export default function OperatorDetails() {
     }
   }, []);
 
-  if (!cl) return null;
+  if (loading || !cl) return (
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator size="large" color={palette.primary} />
+        <Text style={{ color: t.textSecondary, marginTop: 16 }}>Loading checklist…</Text>
+      </View>
+    </SafeAreaView>
+  );
 
   const showAlert = (title: string, msg: string) => setAlert({ title, msg });
 
