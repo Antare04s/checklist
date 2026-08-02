@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Image, Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Image, TextInput, Modal,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -16,6 +16,26 @@ export default function Home() {
   const user = useAuthStore((s) => s.user);
   const [checklists, setChecklists] = useState<any[]>([]);
   const [refresh, setRefresh] = useState(false);
+  const [menuCl, setMenuCl] = useState<any>(null);
+  const [renameModal, setRenameModal] = useState(false);
+  const [renameName, setRenameName] = useState("");
+  const [delConfirm, setDelConfirm] = useState(false);
+
+  const doRename = async () => {
+    if (!menuCl || !renameName.trim()) return;
+    try {
+      await api.put(`/checklists/${menuCl.id}`, { ...menuCl, name: renameName.trim() });
+      setRenameModal(false); setMenuCl(null); load();
+    } catch (e: any) { alert(formatApiError(e)); }
+  };
+
+  const doDelete = async () => {
+    if (!menuCl) return;
+    try {
+      await api.delete(`/checklists/${menuCl.id}`);
+      setDelConfirm(false); setMenuCl(null); load();
+    } catch (e: any) { alert(formatApiError(e)); }
+  };
   const [stats, setStats] = useState<any>({ flights: 0, checklists: 0, aircraft: 0 });
 
   const load = async () => {
@@ -44,6 +64,68 @@ export default function Home() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]} testID="home-screen">
+      {/* Menu modal */}
+      <Modal visible={!!menuCl && !renameModal && !delConfirm} transparent animationType="fade">
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setMenuCl(null)}>
+          <View style={styles.menuBox}>
+            <Text style={styles.menuTitle} numberOfLines={1}>{menuCl?.name}</Text>
+            <TouchableOpacity style={styles.menuRow} onPress={() => { setRenameName(menuCl?.name || ""); setRenameModal(true); }}>
+              <Feather name="edit-2" size={18} color={t.text} />
+              <Text style={styles.menuRowText}>Rename</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuRow} onPress={() => setDelConfirm(true)}>
+              <Feather name="trash-2" size={18} color={palette.danger} />
+              <Text style={[styles.menuRowText, { color: palette.danger }]}>Delete</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuCancel} onPress={() => setMenuCl(null)}>
+              <Text style={{ color: t.textSecondary, fontWeight: "600" }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Rename modal */}
+      <Modal visible={renameModal} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.menuBox}>
+            <Text style={styles.menuTitle}>Rename checklist</Text>
+            <TextInput
+              style={styles.renameInput}
+              value={renameName}
+              onChangeText={setRenameName}
+              autoFocus
+              placeholder="New name"
+              placeholderTextColor={t.textSecondary}
+            />
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: t.background, borderWidth: 1, borderColor: t.border, flex: 1 }]} onPress={() => { setRenameModal(false); setMenuCl(null); }}>
+                <Text style={{ color: t.text, fontWeight: "600" }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: palette.primary, flex: 1 }]} onPress={doRename}>
+                <Text style={{ color: "#fff", fontWeight: "700" }}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete confirm modal */}
+      <Modal visible={delConfirm} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.menuBox}>
+            <Text style={styles.menuTitle}>Delete checklist?</Text>
+            <Text style={{ color: t.textSecondary, fontSize: 14, marginVertical: 8 }}>"{menuCl?.name}" and all its flight logs will be permanently deleted.</Text>
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: t.background, borderWidth: 1, borderColor: t.border, flex: 1 }]} onPress={() => { setDelConfirm(false); setMenuCl(null); }}>
+                <Text style={{ color: t.text, fontWeight: "600" }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: palette.danger, flex: 1 }]} onPress={doDelete}>
+                <Text style={{ color: "#fff", fontWeight: "700" }}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <View style={styles.topBar}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <View style={styles.brandBadge}>
@@ -121,13 +203,18 @@ export default function Home() {
                   </View>
                 </View>
               </View>
-              <TouchableOpacity
-                style={styles.qrIconBtn}
-                onPress={(e) => { e.stopPropagation(); router.push(`/checklist/${cl.id}/qr`); }}
-              >
-                <MaterialCommunityIcons name="qrcode" size={20} color={palette.primary} />
-              </TouchableOpacity>
-              <Feather name="chevron-right" size={20} color={t.textSecondary} />
+            <TouchableOpacity
+              style={styles.qrIconBtn}
+              onPress={(e) => { e.stopPropagation(); router.push(`/checklist/${cl.id}/qr`); }}
+            >
+              <MaterialCommunityIcons name="qrcode" size={20} color={palette.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ padding: 8 }}
+              onPress={(e) => { e.stopPropagation(); setMenuCl(cl); }}
+            >
+              <Feather name="more-vertical" size={20} color={t.textSecondary} />
+            </TouchableOpacity>
             </TouchableOpacity>
           ))
         )}
@@ -172,4 +259,12 @@ const styles = StyleSheet.create({
   badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   badgeText: { fontSize: 11, fontWeight: "600" },
   fab: { position: "absolute", right: 20, bottom: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: palette.primary, alignItems: "center", justifyContent: "center", elevation: 4, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
+  menuBox: { backgroundColor: t.surface, borderRadius: 16, padding: 20, width: 300 },
+  menuTitle: { fontSize: 16, fontWeight: "700", color: t.text, marginBottom: 12 },
+  menuRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: t.border },
+  menuRowText: { fontSize: 15, fontWeight: "500", color: t.text },
+  menuCancel: { alignItems: "center", paddingTop: 14 },
+  renameInput: { height: 44, backgroundColor: t.background, borderRadius: 8, borderWidth: 0.5, borderColor: t.border, paddingHorizontal: 14, fontSize: 15, color: t.text },
+  modalBtn: { height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" },
 });
