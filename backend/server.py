@@ -428,17 +428,16 @@ async def login(body: LoginIn):
 
 @api.post("/auth/reset-password")
 async def reset_password(body: dict):
-    admin_email = os.environ.get("ADMIN_EMAIL", "")
-    admin_password = os.environ.get("ADMIN_PASSWORD", "")
-    if body.get("admin_email") != admin_email or body.get("admin_password") != admin_password:
-        raise HTTPException(403, "Admin verification failed")
     email = body.get("email", "").strip().lower()
+    name = body.get("name", "").strip()
     new_password = body.get("new_password", "")
-    if not email or not new_password or len(new_password) < 6:
-        raise HTTPException(400, "Email and new_password (min 6 chars) required")
+    if not email or not name or not new_password or len(new_password) < 6:
+        raise HTTPException(400, "Email, name, and new_password (min 6 chars) required")
     user = await db.users.find_one({"email": email})
     if not user:
-        raise HTTPException(404, "User not found")
+        raise HTTPException(404, "No account found with this email")
+    if user.get("name", "").strip().lower() != name.lower():
+        raise HTTPException(403, "Name does not match our records")
     hashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
     await db.users.update_one({"email": email}, {"$set": {"password_hash": hashed}})
     return {"message": "Password reset successful"}

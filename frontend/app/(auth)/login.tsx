@@ -69,6 +69,12 @@ export default function Login() {
             placeholderTextColor={t.textSecondary}
           />
 
+          <TouchableOpacity onPress={() => router.push("/(auth)/forgot-password")}>
+            <Text style={{ color: palette.primary, fontSize: 13, fontWeight: "600", marginTop: 8, textAlign: "right" }}>
+              Forgot password?
+            </Text>
+          </TouchableOpacity>
+
           <Text style={{ color: t.textSecondary, fontSize: 13, marginTop: 8, textAlign: "center" }}>
             Forgot password? Contact the admin to reset it.
           </Text>
