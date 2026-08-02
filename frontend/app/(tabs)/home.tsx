@@ -43,11 +43,20 @@ export default function Home() {
       const [a, b] = await Promise.all([api.get("/checklists"), api.get("/stats/overview")]);
       setChecklists(a.data || []);
       setStats(b.data);
+
+      // Resume QR flow after login
+      try {
+        const pendingId = localStorage.getItem("flyready_pending_checklist");
+        if (pendingId) {
+          localStorage.removeItem("flyready_pending_checklist");
+          router.replace(`/flight/operator-details?checklist_id=${pendingId}`);
+        }
+      } catch {}
     } catch (e: any) {
       alert(formatApiError(e));
     }
   };
-
+ 
   useFocusEffect(useCallback(() => { load(); }, []));
 
   const onRefresh = async () => {

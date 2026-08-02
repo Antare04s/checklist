@@ -9,6 +9,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { palette, lightTheme as t } from "../src/theme";
 import { api, formatApiError } from "../src/api";
 import { useFlightDraft } from "../src/flightDraft";
+import { useAuthStore } from "../src/auth";
 
 function WebQrScanner({ onScan }: { onScan: (data: string) => void }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -53,6 +54,7 @@ function WebQrScanner({ onScan }: { onScan: (data: string) => void }) {
 export default function Scan() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
+  const user = useAuthStore((s) => s.user);
   const [scanned, setScanned] = useState(false);
   const [manual, setManual] = useState(false);
   const [code, setCode] = useState("");
@@ -82,6 +84,14 @@ export default function Scan() {
       return;
     }
 
+    if (!user) {
+      try { localStorage.setItem("flyready_pending_checklist", id); } catch {}
+      setError("Please log in first to start a flight with this checklist.");
+      setScanned(false);
+      setBusy(false);
+      return;
+    }
+
     try {
       const { data: cl } = await api.get(`/checklists/${id}`);
       router.replace(`/flight/operator-details?checklist_id=${cl.id}`);
@@ -97,17 +107,30 @@ export default function Scan() {
     if (params.id && !scanned && !busy) {
       handleCode(params.id);
     }
-  }, [params.id]);
+  }, [params.id, user]);
 
   const ErrorModal = () => (
     <Modal visible={!!error} transparent animationType="fade">
       <View style={styles.overlay}>
         <View style={styles.modalBox}>
-          <Text style={styles.modalTitle}>Checklist not found</Text>
+          <Text style={styles.modalTitle}>
+            {error?.includes("log in") ? "Login required" : "Checklist not found"}
+          </Text>
           <Text style={styles.modalMsg}>{error}</Text>
-          <TouchableOpacity style={styles.modalBtn} onPress={() => { setError(null); setScanned(false); }}>
-            <Text style={styles.modalBtnText}>Try again</Text>
-          </TouchableOpacity>
+          {error?.includes("log in") ? (
+            <View style={{ gap: 8 }}>
+              <TouchableOpacity style={styles.modalBtn} onPress={() => { setError(null); router.push("/(auth)/login"); }}>
+                <Text style={styles.modalBtnText}>Log in</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: t.border }]} onPress={() => { setError(null); setScanned(false); }}>
+                <Text style={[styles.modalBtnText, { color: t.text }]}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.modalBtn} onPress={() => { setError(null); setScanned(false); }}>
+              <Text style={styles.modalBtnText}>Try again</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </Modal>
@@ -155,7 +178,6 @@ export default function Scan() {
     );
   }
 
-  // ── WEB: use html5-qrcode ──
   if (Platform.OS === "web") {
     return (
       <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
@@ -187,13 +209,10 @@ export default function Scan() {
     );
   }
 
-  // ── NATIVE: use expo-camera (lazy import) ──
   const NativeScanner = () => {
     const { CameraView: CV, useCameraPermissions: useCP } = require("expo-camera");
     const [perm, reqPerm] = useCP();
-
     if (!perm) return <SafeAreaView style={styles.center}><Text style={{ color: t.text }}>Loading…</Text></SafeAreaView>;
-
     if (!perm.granted) {
       return (
         <SafeAreaView style={styles.center} edges={["top", "bottom"]}>
@@ -207,7 +226,6 @@ export default function Scan() {
         </SafeAreaView>
       );
     }
-
     return (
       <View style={{ flex: 1, backgroundColor: "#000" }}>
         <ErrorModal />
