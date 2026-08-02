@@ -10,7 +10,7 @@ import { palette, droneTypeLabel } from "../../src/theme";
 import { useAppTheme, useThemedStyles } from "../../src/themeContext";
 import { api, formatApiError } from "../../src/api";
 
-type Method = "built_in" | "pdf_upload" | "photo_upload" | "voice" | "manual";
+type Method = "built_in" | "pdf_upload"| "manual";
 type DroneType = "multirotor" | "fixed_wing" | "heavy_lift" | "vtol" | "custom";
 type Phase = "preflight" | "inflight" | "postflight";
 
@@ -324,15 +324,13 @@ export default function NewChecklist() {
           { key: "built_in", icon: "layers-outline", label: "Built-in template", sub: "Multirotor, Fixed wing, VTOL, Heavy lift" },
           { key: "manual", icon: "create-outline", label: "Type manually", sub: "Enter items one by one" },
           { key: "pdf_upload", icon: "document-outline", label: "Upload PDF", sub: "Import from existing PDF checklist" },
-          { key: "photo_upload", icon: "camera-outline", label: "Upload photo", sub: "Photograph an existing checklist" },
-          { key: "voice", icon: "mic-outline", label: "Voice dictation", sub: "Speak checklist items aloud" },
+
         ].map((opt) => (
           <TouchableOpacity key={opt.key} testID={`method-${opt.key}`} style={styles.methodCard} onPress={() => {
             if (opt.key === "built_in") { setStep("templates"); return; }
             if (opt.key === "manual") { setMethod("manual"); setItems([""]); setStep(2); return; }
             if (opt.key === "pdf_upload") { setStep("pdf"); return; }
-            if (opt.key === "photo_upload") { setStep("photo"); return; }
-            if (opt.key === "voice") { setStep("voice"); return; }
+            
           }}>
             <View style={styles.methodIcon}><Ionicons name={opt.icon as any} size={26} color={palette.primary} /></View>
             <View style={{ flex: 1 }}>
