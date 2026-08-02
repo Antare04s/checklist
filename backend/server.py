@@ -104,7 +104,6 @@ async def get_current_user(request: Request) -> dict:
 # ---------------------------------------------------------------------------
 class RegisterIn(BaseModel):
     email: EmailStr
-    password: str
     name: str
 
 
@@ -402,7 +401,7 @@ async def register(body: RegisterIn):
         "id": user_id,
         "email": email,
         "name": body.name,
-        "password_hash": hash_password(body.password),
+        "password_hash": "",
         "role": "pilot",
         "subscription_tier": "free",
         "subscription_expiry": None,
@@ -423,22 +422,6 @@ async def login(body: LoginIn):
         raise HTTPException(status_code=404, detail="No account found. Please register first.")
     token = create_token(user["id"], email)
     return {"access_token": token, "user": serialize(dict(user))}
-
-@api.post("/auth/lookup-name")
-async def lookup_name(body: dict):
-    email = body.get("email", "").strip().lower()
-    if not email:
-        raise HTTPException(400, "Email required")
-    user = await db.users.find_one({"email": email})
-    if not user:
-        raise HTTPException(404, "No account found with this email")
-    name = user.get("name", "")
-    # Show partial name as hint: "ya****a"
-    if len(name) > 2:
-        hint = name[0:2] + "*" * (len(name) - 3) + name[-1]
-    else:
-        hint = name
-    return {"hint": hint}
 
 # ---------------------------------------------------------------------------
 # Aircraft
