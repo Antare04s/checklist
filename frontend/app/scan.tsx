@@ -11,10 +11,14 @@ import { api, formatApiError } from "../src/api";
 import { useFlightDraft } from "../src/flightDraft";
 import { useAuthStore } from "../src/auth";
 
+const isMobileBrowser =
+  Platform.OS === "web" &&
+  typeof navigator !== "undefined" &&
+  /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
 function WebQrScanner({ onScan }: { onScan: (data: string) => void }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const scannerRef = useRef<any>(null);
-
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -26,28 +30,16 @@ function WebQrScanner({ onScan }: { onScan: (data: string) => void }) {
         await scanner.start(
           { facingMode: "environment" },
           { fps: 10, qrbox: { width: 250, height: 250 } },
-          (decodedText) => {
-            onScan(decodedText);
-            scanner.stop().catch(() => {});
-          },
+          (decodedText) => { onScan(decodedText); scanner.stop().catch(() => {}); },
           () => {}
         );
-      } catch (e) {
-        console.warn("Web QR scanner error:", e);
-      }
+      } catch (e) { console.warn("Web QR scanner error:", e); }
     })();
-    return () => {
-      mounted = false;
-      scannerRef.current?.stop?.().catch(() => {});
-    };
+    return () => { mounted = false; scannerRef.current?.stop?.().catch(() => {}); };
   }, []);
-
   return (
-    <div
-      ref={containerRef}
-      id="web-qr-reader"
-      style={{ width: "100%", maxWidth: 400, margin: "0 auto", borderRadius: 12, overflow: "hidden" }}
-    />
+    <div ref={containerRef} id="web-qr-reader"
+      style={{ width: "100%", maxWidth: 400, margin: "0 auto", borderRadius: 12, overflow: "hidden" }} />
   );
 }
 
@@ -72,50 +64,32 @@ export default function Scan() {
 
   const handleCode = async (data: string) => {
     if (scanned || busy) return;
-    setScanned(true);
-    setBusy(true);
-    setError(null);
+    setScanned(true); setBusy(true); setError(null);
     const id = extractId(data);
-
-    if (!id) {
-      setError("No checklist ID found. Check the QR code or ID and try again.");
-      setScanned(false);
-      setBusy(false);
-      return;
-    }
-
+    if (!id) { setError("No checklist ID found."); setScanned(false); setBusy(false); return; }
     if (!user) {
       try { localStorage.setItem("flyready_pending_checklist", id); } catch {}
       setError("Please log in first to start a flight with this checklist.");
-      setScanned(false);
-      setBusy(false);
-      return;
+      setScanned(false); setBusy(false); return;
     }
-
     try {
       const { data: cl } = await api.get(`/checklists/${id}`);
       router.replace(`/flight/operator-details?checklist_id=${cl.id}`);
     } catch (e: any) {
-      setError(formatApiError(e) || "Checklist not found. Check the ID and try again.");
+      setError(formatApiError(e) || "Checklist not found.");
       setScanned(false);
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   };
 
   useEffect(() => {
-    if (params.id && !scanned && !busy) {
-      handleCode(params.id);
-    }
+    if (params.id && !scanned && !busy) handleCode(params.id);
   }, [params.id, user]);
 
   const ErrorModal = () => (
     <Modal visible={!!error} transparent animationType="fade">
       <View style={styles.overlay}>
         <View style={styles.modalBox}>
-          <Text style={styles.modalTitle}>
-            {error?.includes("log in") ? "Login required" : "Checklist not found"}
-          </Text>
+          <Text style={styles.modalTitle}>{error?.includes("log in") ? "Login required" : "Error"}</Text>
           <Text style={styles.modalMsg}>{error}</Text>
           {error?.includes("log in") ? (
             <View style={{ gap: 8 }}>
@@ -136,103 +110,118 @@ export default function Scan() {
     </Modal>
   );
 
-  if (params.id && busy) {
-    return (
-      <SafeAreaView style={styles.center}>
-        <ErrorModal />
-        <ActivityIndicator size="large" color={palette.primary} />
-        <Text style={{ color: t.textSecondary, marginTop: 16 }}>Loading checklist…</Text>
-      </SafeAreaView>
-    );
-  }
+  if (params.id && busy) return (
+    <SafeAreaView style={styles.center}>
+      <ErrorModal />
+      <ActivityIndicator size="large" color={palette.primary} />
+      <Text style={{ color: t.textSecondary, marginTop: 16 }}>Loading checklist…</Text>
+    </SafeAreaView>
+  );
 
-  if (manual) {
-    return (
-      <SafeAreaView style={styles.center} edges={["top", "bottom"]}>
-        <ErrorModal />
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ width: "100%", padding: 24 }}>
-          <TouchableOpacity onPress={() => { setManual(false); setScanned(false); setError(null); }} style={{ marginBottom: 16 }}>
-            <Ionicons name="chevron-back" size={28} color={t.text} />
-          </TouchableOpacity>
-          <Text style={styles.h1}>Enter checklist ID</Text>
-          <Text style={styles.sub}>Paste the checklist ID or the full QR link</Text>
-          <TextInput
-            testID="scan-manual-input"
-            style={styles.input}
-            value={code}
-            onChangeText={setCode}
-            autoCapitalize="none"
-            placeholder="e.g. 4c911c10-cbe4-492b-..."
-            placeholderTextColor={t.textSecondary}
-          />
-          <TouchableOpacity
-            testID="scan-manual-submit"
-            style={[styles.cta, busy && { opacity: 0.6 }]}
-            onPress={() => handleCode(code)}
-            disabled={busy}
-          >
-            <Text style={styles.ctaText}>{busy ? "Looking up…" : "Continue"}</Text>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    );
-  }
+  if (manual) return (
+    <SafeAreaView style={styles.center} edges={["top", "bottom"]}>
+      <ErrorModal />
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ width: "100%", padding: 24 }}>
+        <TouchableOpacity onPress={() => { setManual(false); setScanned(false); setError(null); }} style={{ marginBottom: 16 }}>
+          <Ionicons name="chevron-back" size={28} color={t.text} />
+        </TouchableOpacity>
+        <Text style={styles.h1}>Enter checklist ID</Text>
+        <Text style={styles.sub}>Paste the checklist ID or the full QR link</Text>
+        <TextInput testID="scan-manual-input" style={styles.input} value={code} onChangeText={setCode}
+          autoCapitalize="none" placeholder="e.g. 4c911c10-cbe4-492b-..." placeholderTextColor={t.textSecondary} />
+        <TouchableOpacity testID="scan-manual-submit" style={[styles.cta, busy && { opacity: 0.6 }]}
+          onPress={() => handleCode(code)} disabled={busy}>
+          <Text style={styles.ctaText}>{busy ? "Looking up…" : "Continue"}</Text>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
 
-  if (Platform.OS === "web") {
-    return (
-      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-        <ErrorModal />
-        <View style={styles.topBarSolid}>
-          <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
-            <Ionicons name="chevron-back" size={28} color={t.text} />
-          </TouchableOpacity>
-          <Text style={styles.topTitle}>Scan drone QR code</Text>
-          <View style={{ width: 36 }} />
+  // MOBILE WEB: phone camera instructions
+  if (isMobileBrowser) return (
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      <ErrorModal />
+      <View style={styles.topBarSolid}>
+        <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
+          <Ionicons name="chevron-back" size={28} color={t.text} />
+        </TouchableOpacity>
+        <Text style={styles.topTitle}>Scan drone QR code</Text>
+        <View style={{ width: 36 }} />
+      </View>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <View style={{ width: 100, height: 100, borderRadius: 20, backgroundColor: palette.primary + "12", alignItems: "center", justifyContent: "center" }}>
+          <MaterialCommunityIcons name="cellphone-screenshot" size={56} color={palette.primary} />
         </View>
-        <View style={{ flex: 1, justifyContent: "center", padding: 16 }}>
-          {scanned ? (
-            <View style={{ alignItems: "center" }}>
-              <ActivityIndicator size="large" color={palette.primary} />
-              <Text style={{ color: t.textSecondary, marginTop: 16 }}>Loading checklist…</Text>
-            </View>
-          ) : (
-            <WebQrScanner onScan={handleCode} />
-          )}
-        </View>
-        <View style={{ padding: 16 }}>
-          <TouchableOpacity style={styles.manualBtnSolid} onPress={() => setManual(true)}>
-            <Feather name="edit-3" size={18} color={palette.primary} />
-            <Text style={{ color: palette.primary, fontWeight: "600" }}>Enter checklist ID manually</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+        <Text style={[styles.h1, { textAlign: "center", marginTop: 20 }]}>Use your phone's camera</Text>
+        <Text style={{ color: t.textSecondary, fontSize: 14, textAlign: "center", marginTop: 10, lineHeight: 22 }}>
+          Close this page, open your phone's Camera app, and point it at the QR code on the drone.{"\n\n"}Tap the link that appears — FlyReady will load the checklist automatically.
+        </Text>
+      </View>
+      <View style={{ padding: 16 }}>
+        <TouchableOpacity style={styles.manualBtnSolid} onPress={() => setManual(true)}>
+          <Feather name="edit-3" size={18} color={palette.primary} />
+          <Text style={{ color: palette.primary, fontWeight: "600" }}>Or enter checklist ID manually</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
 
+  // DESKTOP WEB: html5-qrcode scanner
+  if (Platform.OS === "web") return (
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      <ErrorModal />
+      <View style={styles.topBarSolid}>
+        <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
+          <Ionicons name="chevron-back" size={28} color={t.text} />
+        </TouchableOpacity>
+        <Text style={styles.topTitle}>Scan drone QR code</Text>
+        <View style={{ width: 36 }} />
+      </View>
+      <View style={{ flex: 1, justifyContent: "center", padding: 16 }}>
+        {scanned ? (
+          <View style={{ alignItems: "center" }}>
+            <ActivityIndicator size="large" color={palette.primary} />
+            <Text style={{ color: t.textSecondary, marginTop: 16 }}>Loading checklist…</Text>
+          </View>
+        ) : (
+          <WebQrScanner onScan={handleCode} />
+        )}
+      </View>
+      <View style={{ padding: 16 }}>
+        <TouchableOpacity style={styles.manualBtnSolid} onPress={() => setManual(true)}>
+          <Feather name="edit-3" size={18} color={palette.primary} />
+          <Text style={{ color: palette.primary, fontWeight: "600" }}>Enter checklist ID manually</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+
+  // NATIVE: expo-camera
   const NativeScanner = () => {
     const { CameraView: CV, useCameraPermissions: useCP } = require("expo-camera");
     const [perm, reqPerm] = useCP();
     if (!perm) return <SafeAreaView style={styles.center}><Text style={{ color: t.text }}>Loading…</Text></SafeAreaView>;
-    if (!perm.granted) {
-      return (
-        <SafeAreaView style={styles.center} edges={["top", "bottom"]}>
-          <ErrorModal />
-          <MaterialCommunityIcons name="camera-off-outline" size={64} color={t.textSecondary} />
-          <Text style={styles.h1}>Camera permission needed</Text>
-          <TouchableOpacity style={styles.cta} onPress={reqPerm}><Text style={styles.ctaText}>Grant access</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => setManual(true)} style={{ marginTop: 16 }}>
-            <Text style={{ color: palette.primary, fontWeight: "600" }}>Enter ID manually</Text>
-          </TouchableOpacity>
-        </SafeAreaView>
-      );
-    }
+    if (!perm.granted) return (
+      <SafeAreaView style={styles.center} edges={["top", "bottom"]}>
+        <ErrorModal />
+        <MaterialCommunityIcons name="camera-off-outline" size={64} color={t.textSecondary} />
+        <Text style={styles.h1}>Camera permission needed</Text>
+        <TouchableOpacity style={styles.cta} onPress={reqPerm}><Text style={styles.ctaText}>Grant access</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => setManual(true)} style={{ marginTop: 16 }}>
+          <Text style={{ color: palette.primary, fontWeight: "600" }}>Enter ID manually</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
     return (
       <View style={{ flex: 1, backgroundColor: "#000" }}>
         <ErrorModal />
-        <CV style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={{ barcodeTypes: ["qr"] }} onBarcodeScanned={(e: any) => handleCode(e.data)} />
+        <CV style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+          onBarcodeScanned={(e: any) => handleCode(e.data)} />
         <SafeAreaView edges={["top"]} style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
           <View style={styles.topRow}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}><Ionicons name="chevron-back" size={28} color={palette.white} /></TouchableOpacity>
+            <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+              <Ionicons name="chevron-back" size={28} color={palette.white} />
+            </TouchableOpacity>
             <Text style={styles.scanHeader}>Scan drone QR code</Text>
             <View style={{ width: 36 }} />
           </View>
@@ -250,7 +239,6 @@ export default function Scan() {
       </View>
     );
   };
-
   return <NativeScanner />;
 }
 
