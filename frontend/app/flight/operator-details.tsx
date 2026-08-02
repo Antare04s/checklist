@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal,
   KeyboardAvoidingView, Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { palette, lightTheme as t, droneTypeLabel } from "../../src/theme";
@@ -13,6 +13,7 @@ import { api, formatApiError } from "../../src/api";
 
 export default function OperatorDetails() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ checklist_id?: string }>();
   const draft = useFlightDraft();
   const cl = draft.checklist;
   const [alert, setAlert] = useState<{ title: string; msg: string } | null>(null);
@@ -23,6 +24,19 @@ export default function OperatorDetails() {
   const [weatherMode, setWeatherMode] = useState<"auto" | "manual">("manual");
 
   useEffect(() => {
+    // If opened via QR link, fetch checklist from API
+    if (!cl && params.checklist_id) {
+      (async () => {
+        try {
+          const { data } = await api.get(`/checklists/${params.checklist_id}`);
+          draft.reset();
+          draft.setChecklist(data);
+        } catch {
+          router.replace("/(tabs)/home");
+        }
+      })();
+      return;
+    }
     if (!cl) router.replace("/(tabs)/home");
     if (!draft.flight_id) {
       const today = new Date();

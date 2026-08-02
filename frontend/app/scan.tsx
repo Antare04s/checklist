@@ -84,9 +84,7 @@ export default function Scan() {
 
     try {
       const { data: cl } = await api.get(`/checklists/${id}`);
-      useFlightDraft.getState().reset();
-      useFlightDraft.getState().setChecklist(cl);
-      router.replace("/flight/operator-details");
+      router.replace(`/flight/operator-details?checklist_id=${cl.id}`);
     } catch (e: any) {
       setError(formatApiError(e) || "Checklist not found. Check the ID and try again.");
       setScanned(false);
