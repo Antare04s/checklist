@@ -24,7 +24,7 @@ export default function Home() {
       setChecklists(a.data || []);
       setStats(b.data);
     } catch (e: any) {
-      Alert.alert("Error", formatApiError(e));
+      alert(formatApiError(e));
     }
   };
 
