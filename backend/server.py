@@ -427,9 +427,18 @@ async def login(body: LoginIn):
     return {"access_token": token, "user": serialize(dict(user))}
 
 
-@api.get("/auth/me")
-async def me(user: dict = Depends(get_current_user)):
-    return user
+@api.post("/auth/reset-password")
+async def reset_password(body: dict):
+    email = body.get("email", "").strip().lower()
+    new_password = body.get("new_password", "")
+    if not email or not new_password:
+        raise HTTPException(400, "Email and new_password required")
+    user = await db.users.find_one({"email": email})
+    if not user:
+        raise HTTPException(404, "User not found")
+    hashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+    await db.users.update_one({"email": email}, {"$set": {"hashed_password": hashed}})
+    return {"message": "Password reset successful"}
 
 
 # ---------------------------------------------------------------------------
