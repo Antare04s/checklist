@@ -110,8 +110,6 @@ class RegisterIn(BaseModel):
 
 class LoginIn(BaseModel):
     email: EmailStr
-    password: str
-
 
 class AircraftIn(BaseModel):
     name: str
@@ -421,27 +419,26 @@ async def register(body: RegisterIn):
 async def login(body: LoginIn):
     email = body.email.lower().strip()
     user = await db.users.find_one({"email": email})
-    if not user or not verify_password(body.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user:
+        raise HTTPException(status_code=404, detail="No account found. Please register first.")
     token = create_token(user["id"], email)
     return {"access_token": token, "user": serialize(dict(user))}
 
-@api.post("/auth/reset-password")
-async def reset_password(body: dict):
+@api.post("/auth/lookup-name")
+async def lookup_name(body: dict):
     email = body.get("email", "").strip().lower()
-    name = body.get("name", "").strip()
-    new_password = body.get("new_password", "")
-    if not email or not name or not new_password or len(new_password) < 6:
-        raise HTTPException(400, "Email, name, and new_password (min 6 chars) required")
+    if not email:
+        raise HTTPException(400, "Email required")
     user = await db.users.find_one({"email": email})
     if not user:
         raise HTTPException(404, "No account found with this email")
-    if user.get("name", "").strip().lower() != name.lower():
-        raise HTTPException(403, "Name does not match our records")
-    hashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
-    await db.users.update_one({"email": email}, {"$set": {"password_hash": hashed}})
-    return {"message": "Password reset successful"}
-
+    name = user.get("name", "")
+    # Show partial name as hint: "ya****a"
+    if len(name) > 2:
+        hint = name[0:2] + "*" * (len(name) - 3) + name[-1]
+    else:
+        hint = name
+    return {"hint": hint}
 
 # ---------------------------------------------------------------------------
 # Aircraft

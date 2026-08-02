@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert } from "react-native";
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -11,19 +11,24 @@ import { formatApiError } from "../../src/api";
 export default function Login() {
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
-  const [email, setEmail] = useState("pilot@flyready.app");
-  const [password, setPassword] = useState("Pilot@123");
+  const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const submit = async () => {
     setErr(null);
+    if (!email.trim()) { setErr("Please enter your email"); return; }
     setBusy(true);
     try {
-      await login(email.trim(), password);
+      await login(email.trim());
       router.replace("/(tabs)/home");
     } catch (e: any) {
-      setErr(formatApiError(e));
+      const msg = formatApiError(e);
+      if (msg.includes("404") || msg.includes("No account")) {
+        setErr("No account found. Please register first.");
+      } else {
+        setErr(msg);
+      }
     } finally {
       setBusy(false);
     }
@@ -42,7 +47,7 @@ export default function Login() {
           </View>
 
           <Text style={styles.h1}>Welcome back</Text>
-          <Text style={styles.sub}>Log in to access your fleet and checklists</Text>
+          <Text style={styles.sub}>Enter your email to continue</Text>
 
           <View style={{ height: 24 }} />
 
@@ -58,23 +63,6 @@ export default function Login() {
             placeholderTextColor={t.textSecondary}
           />
 
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            testID="login-password-input"
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            placeholder="••••••••"
-            placeholderTextColor={t.textSecondary}
-          />
-
-          <TouchableOpacity onPress={() => router.push("/(auth)/forgot-password")}>
-            <Text style={{ color: palette.primary, fontSize: 13, fontWeight: "600", marginTop: 8, textAlign: "right" }}>
-              Forgot password?
-            </Text>
-          </TouchableOpacity>
-
           {err && <Text testID="login-error" style={styles.err}>{err}</Text>}
 
           <TouchableOpacity
@@ -83,13 +71,13 @@ export default function Login() {
             style={[styles.cta, busy && { opacity: 0.6 }]}
             onPress={submit}
           >
-            <Text style={styles.ctaText}>{busy ? "Signing in…" : "Log in"}</Text>
+            <Text style={styles.ctaText}>{busy ? "Signing in…" : "Continue"}</Text>
             <Ionicons name="arrow-forward" size={20} color={palette.white} />
           </TouchableOpacity>
 
           <TouchableOpacity testID="login-go-register" onPress={() => router.push("/(auth)/register")} style={styles.linkRow}>
             <Text style={styles.linkText}>
-              No account yet? <Text style={{ color: palette.primary, fontWeight: "700" }}>Create one</Text>
+              New here? <Text style={{ color: palette.primary, fontWeight: "700" }}>Create an account</Text>
             </Text>
           </TouchableOpacity>
         </ScrollView>

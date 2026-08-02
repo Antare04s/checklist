@@ -12,19 +12,18 @@ export default function Register() {
   const reg = useAuthStore((s) => s.register);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const submit = async () => {
     setErr(null);
-    if (!email || !password || !name) {
-      setErr("Please fill all fields");
+    if (!email.trim() || !name.trim()) {
+      setErr("Please fill in both fields");
       return;
     }
     setBusy(true);
     try {
-      await reg(email.trim(), password, name.trim());
+      await reg(email.trim(), name.trim());
       router.replace("/(tabs)/home");
     } catch (e: any) {
       setErr(formatApiError(e));
@@ -44,13 +43,10 @@ export default function Register() {
           <Text style={styles.sub}>Get started with FlyReady — free</Text>
 
           <Text style={styles.label}>Full name</Text>
-          <TextInput testID="register-name-input" style={styles.input} value={name} onChangeText={setName} placeholder="Jane Pilot" placeholderTextColor={t.textSecondary} />
+          <TextInput testID="register-name-input" style={styles.input} value={name} onChangeText={setName} placeholder="Your name" placeholderTextColor={t.textSecondary} />
 
           <Text style={styles.label}>Email</Text>
           <TextInput testID="register-email-input" style={styles.input} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder="you@example.com" placeholderTextColor={t.textSecondary} />
-
-          <Text style={styles.label}>Password</Text>
-          <TextInput testID="register-password-input" style={styles.input} value={password} onChangeText={setPassword} secureTextEntry placeholder="At least 6 characters" placeholderTextColor={t.textSecondary} />
 
           {err && <Text testID="register-error" style={styles.err}>{err}</Text>}
 

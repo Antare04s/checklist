@@ -14,8 +14,8 @@ type AuthState = {
   user: User | null;
   loading: boolean;
   bootstrap: () => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
+  login: (email: string) => Promise<void>;
+  register: (email: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -37,13 +37,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user: null, loading: false });
     }
   },
-  login: async (email, password) => {
-    const { data } = await api.post("/auth/login", { email, password });
+  login: async (email) => {
+    const { data } = await api.post("/auth/login", { email });
     await saveToken(data.access_token);
     set({ user: data.user });
   },
-  register: async (email, password, name) => {
-    const { data } = await api.post("/auth/register", { email, password, name });
+  register: async (email, name) => {
+    const { data } = await api.post("/auth/register", { email, name });
     await saveToken(data.access_token);
     set({ user: data.user });
   },
