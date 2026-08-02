@@ -855,7 +855,8 @@ async def parse_image(file: UploadFile = File(...), current_user: dict = Depends
         raise HTTPException(500, f"Could not read image: {str(e)}")
 
     if response.status_code != 200:
-        raise HTTPException(500, "Image reading service unavailable. Try manual entry.")
+        logger.error(f"Gemini API error {response.status_code}: {response.text[:500]}")
+        raise HTTPException(500, f"Image reading failed ({response.status_code}). Try manual entry.")
 
     result = response.json()
     # Gemini response format
