@@ -75,10 +75,6 @@ export default function Login() {
             </Text>
           </TouchableOpacity>
 
-          <Text style={{ color: t.textSecondary, fontSize: 13, marginTop: 8, textAlign: "center" }}>
-            Forgot password? Contact the admin to reset it.
-          </Text>
-
           {err && <Text testID="login-error" style={styles.err}>{err}</Text>}
 
           <TouchableOpacity
